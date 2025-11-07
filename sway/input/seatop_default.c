@@ -22,6 +22,7 @@
 #include "sway/tree/container.h"
 #include <wlr/types/wlr_scene.h>
 #include "sway/sway_text_node.h"
+#include "sway/tree/arrange.h"
 #endif
 
 struct seatop_default_event {
@@ -36,19 +37,37 @@ static void titlebar_button_invoke(struct sway_seat *seat,
 	struct sway_container *con, int index) {
 	// index: 0 float, 1 maximize, 2 close
 	switch (index) {
-		case 0: // float
-			// TODO: implement "float" action
+		case 0: // float - toggle floating
+			container_set_floating(con, !container_is_floating(con));
+			// ensure workspace gets rearranged immediately to avoid gaps in tiling
+			if (con->pending.workspace) {
+				arrange_workspace(con->pending.workspace);
+			}
+			// commit pending -> current so changes are visible immediately
+			transaction_commit_dirty();
 			break;
-		case 1: // maximize / toggle fullscreen or tiled maximize
-			// TODO: implement "maximize" action
+		case 1: { // maximize / toggle fullscreen (workspace fullscreen)
+			enum sway_fullscreen_mode mode = FULLSCREEN_NONE;
+			if (con->pending.fullscreen_mode == FULLSCREEN_NONE) {
+				mode = FULLSCREEN_WORKSPACE;
+			}
+			container_set_fullscreen(con, mode);
+			// fullscreen changes affect layout globally
+			arrange_root();
+			// commit pending -> current so fullscreen is applied immediately
+			transaction_commit_dirty();
 			break;
-		case 2: // close
-			// TODO: implement "close" action
+		}
+		case 2: // close - ask the view to close
+			if (con->view) {
+				view_close(con->view);
+			}
 			break;
 		default:
 			break;
 	}
 }
+
 
 
 static void update_titlebar_buttons_hover(struct sway_container *con, int hovered) {
