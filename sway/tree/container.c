@@ -102,11 +102,12 @@ struct sway_container *container_create(struct sway_view *view) {
 	//       is a border as well)
 	//     - buffer used for output enter/leave events for foreign_toplevel
 	bool failed = false;
-	c->scene_tree = alloc_scene_tree(root->staging, &failed);
 
+	c->scene_tree = alloc_scene_tree(root->staging, &failed);
 	c->title_bar.tree = alloc_scene_tree(c->scene_tree, &failed);
-	c->title_bar.border = alloc_scene_tree(c->title_bar.tree, &failed);
 	c->title_bar.background = alloc_scene_tree(c->title_bar.tree, &failed);
+	c->title_bar.buttons.tree = alloc_scene_tree(c->title_bar.tree, &failed);
+	c->title_bar.border = alloc_scene_tree(c->title_bar.tree, &failed);
 
 	// for opacity purposes we need to carfully create the scene such that
 	// none of our rect nodes as well as text buffers don't overlap. To do
@@ -306,6 +307,19 @@ void container_update(struct sway_container *con) {
 		sway_text_node_set_color(con->title_bar.marks_text, colors->text);
 		sway_text_node_set_background(con->title_bar.marks_text, colors->background);
 	}
+
+	if (con->title_bar.buttons.close_glyph) {
+		sway_text_node_set_color(con->title_bar.buttons.close_glyph, colors->text);
+		sway_text_node_set_background(con->title_bar.buttons.close_glyph, colors->background);
+	}
+	if (con->title_bar.buttons.maximize_glyph) {
+		sway_text_node_set_color(con->title_bar.buttons.maximize_glyph, colors->text);
+		sway_text_node_set_background(con->title_bar.buttons.maximize_glyph, colors->background);
+	}
+	if (con->title_bar.buttons.float_glyph) {
+		sway_text_node_set_color(con->title_bar.buttons.float_glyph, colors->text);
+		sway_text_node_set_background(con->title_bar.buttons.float_glyph, colors->background);
+	}
 }
 
 void container_update_itself_and_parents(struct sway_container *con) {
@@ -399,6 +413,30 @@ void container_arrange_title_bar(struct sway_container *con) {
 			node->node->x, node->node->y, alloc_width, node->height);
 	}
 
+	int button_size = height;
+	int button_x = width - button_size * 3;
+
+	int close_x = button_x + button_size * 2;
+	if (con->title_bar.buttons.close_glyph) {
+		int text_x = close_x + button_size / 2;
+		int text_y = 2; //this is a placeholder value until i find a way to get the height of a font automatically
+		wlr_scene_node_set_position(con->title_bar.buttons.close_glyph->node, text_x, text_y);
+	}
+
+	int maximize_x = button_x + button_size;
+	if (con->title_bar.buttons.maximize_glyph) {
+		int text_x = maximize_x + button_size / 2;
+		int text_y = 2;
+		wlr_scene_node_set_position(con->title_bar.buttons.maximize_glyph->node, text_x, text_y);
+	}
+
+	int float_x = button_x;
+	if (con->title_bar.buttons.float_glyph) {
+		int text_x = float_x + button_size / 2;
+		int text_y = 0;
+		wlr_scene_node_set_position(con->title_bar.buttons.float_glyph->node, text_x, text_y);
+	}
+
 	// silence pixman errors
 	if (width <= 0 || height <= 0) {
 		pixman_region32_fini(&text_area);
@@ -487,6 +525,13 @@ void container_update_title_bar(struct sway_container *con) {
 
 	con->title_bar.title_text = sway_text_node_create(con->title_bar.tree,
 		con->formatted_title, colors->text, config->pango_markup);
+
+	con->title_bar.buttons.close_glyph = sway_text_node_create(
+		con->title_bar.buttons.tree, "×", colors->text, false);
+	con->title_bar.buttons.maximize_glyph = sway_text_node_create(
+		con->title_bar.buttons.tree, "□", colors->text, false);
+	con->title_bar.buttons.float_glyph = sway_text_node_create(
+		con->title_bar.buttons.tree, "↗", colors->text, false);
 
 	// we always have to remake these text buffers completely for text font
 	// changes etc...

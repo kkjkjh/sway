@@ -73,10 +73,14 @@ struct sway_container {
 
 	struct {
 		struct wlr_scene_tree *tree;
-
 		struct wlr_scene_tree *border;
+		struct {
+			struct wlr_scene_tree *tree;
+			struct sway_text_node *close_glyph;
+			struct sway_text_node *maximize_glyph;
+			struct sway_text_node *float_glyph;
+		} buttons;
 		struct wlr_scene_tree *background;
-
 		struct sway_text_node *title_text;
 		struct sway_text_node *marks_text;
 	} title_bar;
