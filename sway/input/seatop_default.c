@@ -19,6 +19,9 @@
 #include "util.h"
 #if WLR_HAS_XWAYLAND
 #include "sway/xwayland.h"
+#include "sway/tree/container.h"
+#include <wlr/types/wlr_scene.h>
+#include "sway/sway_text_node.h"
 #endif
 
 struct seatop_default_event {
@@ -26,7 +29,54 @@ struct seatop_default_event {
 	uint32_t pressed_buttons[SWAY_CURSOR_PRESSED_BUTTONS_CAP];
 	size_t pressed_button_count;
 	struct gesture_tracker gestures;
+	int hovered_button;
 };
+
+static void titlebar_button_invoke(struct sway_seat *seat,
+	struct sway_container *con, int index) {
+	// index: 0 float, 1 maximize, 2 close
+	switch (index) {
+		case 0: // float
+			// TODO: implement "float" action
+			break;
+		case 1: // maximize / toggle fullscreen or tiled maximize
+			// TODO: implement "maximize" action
+			break;
+		case 2: // close
+			// TODO: implement "close" action
+			break;
+		default:
+			break;
+	}
+}
+
+
+static void update_titlebar_buttons_hover(struct sway_container *con, int hovered) {
+	if (!con) return;
+
+	// Hardcoded RGBA colors: normal = white text on dark gray background
+	// hovered = black text on light gray background
+	float normal_text[4]   = {1.0f, 1.0f, 1.0f, 1.0f};
+	float hover_float[4]    = {0.0f, 0.0f, 1.0f, 1.0f};
+	float hover_max[4]    = {0.0f, 1.0f, 0.0f, 1.0f};
+	float hover_close[4]    = {1.0f, 0.0f, 0.0f, 1.0f};
+
+
+	struct sway_text_node *float_g  = con->title_bar.buttons.float_glyph;
+	struct sway_text_node *max_g    = con->title_bar.buttons.maximize_glyph;
+	struct sway_text_node *close_g  = con->title_bar.buttons.close_glyph;
+
+	if (float_g) {
+		sway_text_node_set_color(float_g, hovered == 0 ? hover_float : normal_text);
+	}
+	if (max_g) {
+		sway_text_node_set_color(max_g, hovered == 1 ? hover_max : normal_text);
+	}
+	if (close_g) {
+		sway_text_node_set_color(close_g, hovered == 2 ? hover_close : normal_text);
+	}
+}
+
 
 /*-----------------------------------------\
  * Functions shared by multiple callbacks  /
@@ -363,6 +413,16 @@ static void handle_button(struct sway_seat *seat, uint32_t time_msec,
 	bool mod_resize_btn_pressed = mod_pressed && button == mod_resize_btn;
 	bool titlebar_left_btn_pressed = on_titlebar && button == BTN_LEFT;
 
+	// Handle titlebar buttons
+	struct seatop_default_event *e = seat->seatop_data;
+	if (cont && on_titlebar && state == WL_POINTER_BUTTON_STATE_PRESSED && e->hovered_button >= 0) {
+		// the hovered index is 0=float,1=max,2=close
+		titlebar_button_invoke(seat, cont, e->hovered_button);
+		// Optionally, consume the event:
+		seat_pointer_notify_button(seat, time_msec, button, state);
+		return;
+	}
+
 	// Handle mouse bindings
 	if (trigger_pointer_button_binding(seat, device, button, state, modifiers,
 			on_titlebar, on_border, on_contents, on_workspace)) {
@@ -625,6 +685,44 @@ static void handle_pointer_motion(struct sway_seat *seat, uint32_t time_msec) {
 	drag_icons_update_position(seat);
 
 	e->previous_node = node;
+
+	/* --- Begin titlebar-button hover detection/update --- */
+	struct sway_container *cont = node && node->type == N_CONTAINER ?
+	node->sway_container : NULL;
+	if (cont) {
+		enum wlr_edges edge = find_edge(cont, surface, cursor);
+		bool on_border = edge != WLR_EDGE_NONE;
+		bool on_titlebar = !on_border && !surface;
+		int new_hovered = -1;
+
+		if (on_titlebar) {
+			// compute local x within the title region like container_arrange_title_bar()
+			int width = cont->title_width;
+			int height = container_titlebar_height();
+			int button_size = height;
+			int button_x = width - button_size * 3;
+
+			// approximate left/top of title area in layout coords:
+			int title_left = (int)(cont->pending.x + cont->pending.border_thickness);
+			int local_x = (int)cursor->cursor->x - title_left;
+
+			// If local_x is inside the titlebar area, test which button
+			if (local_x >= button_x && local_x < button_x + button_size * 3) {
+				int slot = (local_x - button_x) / button_size; // 0..2
+				// slot: 0 -> float, 1 -> maximize, 2 -> close
+				if (slot >= 0 && slot <= 2) {
+					new_hovered = slot;
+				}
+			}
+		}
+
+		if (new_hovered != e->hovered_button) {
+			e->hovered_button = new_hovered;
+			update_titlebar_buttons_hover(cont, new_hovered);
+			// if you want a redraw/transaction, container_update_itself_and_parents(cont);
+		}
+	}
+	/* --- End titlebar-button hover detection/update --- */
 }
 
 static void handle_tablet_tool_motion(struct sway_seat *seat,

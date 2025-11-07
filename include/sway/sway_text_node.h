@@ -14,6 +14,7 @@ struct sway_text_node {
 	struct wlr_scene_node *node;
 };
 
+
 struct sway_text_node *sway_text_node_create(struct wlr_scene_tree *parent,
 		char *text, float color[4], bool pango_markup);
 
